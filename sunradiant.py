@@ -15,36 +15,40 @@ open("/tmp/data.html", "wb").write(r.content)
 
 # cat /tmp/data.html | pup 'div[id="HorasDia2"] span[class="hora"],div[id="HorasDia2"] strong text{}'
 
-p = Popen(
-    ["pup", 'div[id="HorasDia2"] span[class="hora"],div[id="HorasDia2"] strong text{}'],
-    stdout=PIPE,
-    stdin=PIPE,
-    stderr=PIPE,
-)
-stdout_data = p.communicate(input=r.content)[0]
-raw_data = stdout_data.decode()
-arr_data = raw_data.split("\n")
-len_data = int((len(arr_data) - 1) / 2)
-
 today = date.today()
-tomorrow = today + timedelta(days=1)
-
-radiance = []
-
-for i in range(0, len_data):
-    hour = int(arr_data[i][:2])
-    dt = datetime(tomorrow.year, tomorrow.month, tomorrow.day, hour)
-    radiance.append((dt, int(arr_data[len_data + i])))
-
-auth = HTTPBasicAuth(influxdb_user, influxdb_password)
 raw_post = ""
-for ri in radiance:
-    epoch = int(time.mktime(ri[0].timetuple()))
-    print(f"Irradiance value for {ri[0]} = {ri[1]} W/m²")
-    raw_post = (
-        raw_post
-        + f"irradiance_prediction,unit_of_measurement=wm2 value={ri[1]} {epoch}\n"
+for d in range(2, 16):
+    p = Popen(
+        [
+            "pup",
+            f'div[id="HorasDia{d}"] span[class="hora"],div[id="HorasDia{d}"] strong text{{}}',
+        ],
+        stdout=PIPE,
+        stdin=PIPE,
+        stderr=PIPE,
     )
+    stdout_data = p.communicate(input=r.content)[0]
+    raw_data = stdout_data.decode()
+    arr_data = raw_data.split("\n")
+    len_data = int((len(arr_data) - 1) / 2)
+
+    tomorrow = today + timedelta(days=d - 1)
+
+    radiance = []
+
+    for i in range(0, len_data):
+        hour = int(arr_data[i][:2])
+        dt = datetime(tomorrow.year, tomorrow.month, tomorrow.day, hour)
+        radiance.append((dt, int(arr_data[len_data + i])))
+
+    auth = HTTPBasicAuth(influxdb_user, influxdb_password)
+    for ri in radiance:
+        epoch = int(time.mktime(ri[0].timetuple()))
+        print(f"Irradiance value for {ri[0]} = {ri[1]} W/m²")
+        raw_post = (
+            raw_post
+            + f"irradiance_prediction,unit_of_measurement=wm2 value={ri[1]} {epoch}\n"
+        )
 
 print("posting...")
 result = requests.post(influxdb_url, data=raw_post, auth=auth)
